@@ -19,9 +19,6 @@ import psycopg2
 
 
 
-# class UserQuery(BaseModel):
-#     query: str
-# 2. Define Tool Structures (Stub implementations for demo purposes)
 def nutrition_planner(userquery: str) -> Dict[str, Any]:
     """
     Simple rule-based nutrition planner.
@@ -30,6 +27,7 @@ def nutrition_planner(userquery: str) -> Dict[str, Any]:
     - Returns 1-day sample meal plan + tips.
     """
     q = userquery.lower()
+    print(f"Nutrition planner received query: {q}")
 
     # 1) Goal detection
     if any(k in q for k in ["lose fat", "fat loss", "weight loss", "slim", "reduce weight"]):
@@ -169,7 +167,7 @@ def sleep_optimizer(userquery: str) -> Dict[str, Any]:
     - Recommends target sleep range + simple schedule.
     """
     q = userquery.lower()
-
+    print(f"Sleep optimizer received query: {q}")
     # Age detection by regex (very rough)
     age = None
     m = re.search(r"(\d{1,2})\s*(years|yrs|yo|year old)", q)
@@ -178,32 +176,32 @@ def sleep_optimizer(userquery: str) -> Dict[str, Any]:
 
     if age is None:
         age_group = "adult"
-        recommended_hours = "7–9"
+        recommended_hours = "7-9"
     elif age < 1:
         age_group = "infant"
-        recommended_hours = "12–16 (including naps)"
+        recommended_hours = "12-16 (including naps)"
     elif 1 <= age <= 2:
         age_group = "toddler"
-        recommended_hours = "11–14 (including naps)"
+        recommended_hours = "11-14 (including naps)"
     elif 3 <= age <= 5:
         age_group = "preschool"
-        recommended_hours = "10–13 (including naps)"
+        recommended_hours = "10-13 (including naps)"
     elif 6 <= age <= 12:
         age_group = "school_age"
-        recommended_hours = "9–12"
+        recommended_hours = "9-12"
     elif 13 <= age <= 18:
         age_group = "teen"
-        recommended_hours = "8–10"
+        recommended_hours = "8-10"
     else:
         age_group = "adult"
-        recommended_hours = "7–9"
+        recommended_hours = "7-9"
 
     # Simple schedule heuristic: assume typical wake at 7:00
     wake_time = "07:00"
     if age_group in ["adult", "teen"]:
-        bed_time = "22:30–23:30"
+        bed_time = "22:30-23:30"
     else:
-        bed_time = "20:00–21:00"
+        bed_time = "20:00-21:00"
 
     response = {
         "age_group": age_group,
@@ -243,8 +241,8 @@ def mental_wellness(userquery: str) -> Dict[str, Any]:
         concern = "general"
 
     daily_routine = [
-        "2–5 minutes of slow deep breathing (inhale 4s, exhale 6s) once or twice per day.",
-        "5–10 minutes of light movement or a short walk, ideally outdoors.",
+        "2-5 minutes of slow deep breathing (inhale 4s, exhale 6s) once or twice per day.",
+        "5-10 minutes of light movement or a short walk, ideally outdoors.",
         "Short check-in journal: write 3 things on your mind and one small action for tomorrow.",
         "Brief wind-down routine before bed: dim lights, no work or heavy social media."
     ]
@@ -254,7 +252,7 @@ def mental_wellness(userquery: str) -> Dict[str, Any]:
         "suggested_daily_routine": daily_routine,
         "in_the_moment_techniques": [
             "5-4-3-2-1 grounding: name 5 things you see, 4 you can touch, 3 you can hear, 2 you can smell, 1 you can taste.",
-            "Box breathing: inhale 4s, hold 4s, exhale 4s, hold 4s, repeat 4–6 times.",
+            "Box breathing: inhale 4s, hold 4s, exhale 4s, hold 4s, repeat 4-6 times.",
             "Body scan: slowly relax muscles from toes up to face, noticing tension without judging."
         ],
         "safety_note": (
@@ -314,62 +312,64 @@ system_prompt = (
 )
 
 # Use memory to maintain conversation context
-memory = InMemorySaver()
+#memory = InMemorySaver()
 spending_agent = create_react_agent(
     model,
     tools=[log_health_spend],
-    name="health_spend_logger",
+    name="spending_agent",
     prompt=system_prompt,
-    checkpointer=memory
+    
 )
 
 nutrition_agent = create_react_agent(
     model,
     tools=[nutrition_planner],
-    name="nutrition_planner",
+    name="nutrition_agent",
     prompt=("You are a Nutrition Planner. Handle any queries related to meal plans, nutrition advice, or calorie tracking."
-            "You MUST answer ONLY by calling one of your tools.\n"
-        "Do NOT answer directly; always use a tool, even if you know the answer.\n"
+            "1. First, call the 'nutrition_planner' tool to get data. "
+            "2. Once you have the tool results, summarize them into a friendly answer for the user. "
+            "3. DO NOT call the tool more than once for the same query."
     )
 )
 
 fitness_agent = create_react_agent(
     model,
     tools=[fitness_trackker],
-    name="fitness_tracker",
+    name="fitness_agent",
     prompt=("You are a Fitness Trainer. Handle queries about exercises, workout routines, or exercise form."
-            "You MUST answer ONLY by calling one of your tools.\n"
-        "Do NOT answer directly; always use a tool, even if you know the answer.\n"
+            "1. First, call the 'fitness_trackker' tool to get data. "
+            "2. Once you have the tool results, summarize them into a friendly answer for the user. "
+            "3. DO NOT call the tool more than once for the same query."
     )
 )
 
 sleep_agent = create_react_agent(
     model,
     tools=[sleep_optimizer],
-    name="sleep_optimizer",
-    prompt=("You are a Sleep Optimizer. Advise on sleep hygiene, setting sleep schedules, and improving rest."
-            "You MUST answer ONLY by calling one of your tools.\n"
-        "Do NOT answer directly; always use a tool, even if you know the answer.\n"
+    name="sleep_agent",
+    prompt=("You are a Sleep Optimizer. Advise on sleep hygiene, setting sleep schedules call the 'sleep_optimizer' tool to get data."
+            "DO NOT call the tool more than once for the same query."
     )
 )
 
 wellness_agent = create_react_agent(
     model,
     tools=[mental_wellness],
-    name="mental_wellness",
+    name="wellness_agent",
     prompt=("You are a Mental Wellness Advisor. Answer questions on meditation, stress management, and mental health support."
-            "You MUST answer ONLY by calling one of your tools.\n"
-        "Do NOT answer directly; always use a tool, even if you know the answer.\n"
+            "1. First, call the 'mental_wellness' tool to get data. "
+            "2. Once you have the tool results, summarize them into a friendly answer for the user. "
+            "3. DO NOT call the tool more than once for the same query."
     )
 )
 
-ALL_AGENTS = {
-    "nutrition": nutrition_agent,
-    "fitness": fitness_agent,
-    "sleep": sleep_agent,
-    "wellness": wellness_agent,
-    "spending": spending_agent
-}
+# ALL_AGENTS = {
+#     "nutrition": nutrition_agent,
+#     "fitness": fitness_agent,
+#     "sleep": sleep_agent,
+#     "wellness": wellness_agent,
+#     "spending": spending_agent
+# }
 
 # def run_query(query_text: str):
 #     #config with a thread_id for the memory saver

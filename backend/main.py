@@ -12,8 +12,8 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
-from agents import nutrition_agent, fitness_agent, sleep_agent, wellness_agent, spending_agent
-
+#from agents import nutrition_agent, fitness_agent, sleep_agent, wellness_agent, spending_agent
+from agents import fitness_trackker, nutrition_planner, sleep_optimizer, mental_wellness, log_health_spend
 
 # check_llm = model.invoke("what is breakfast?")
 # print(f"LLM Check Response: {check_llm.content}")
@@ -372,38 +372,70 @@ load_dotenv()
 #     )
 # )
 
-workflow = create_supervisor(
-    [nutrition_agent, wellness_agent, sleep_agent, fitness_agent, spending_agent],
-    #agent_list,
-    model=model,
-    prompt=(
-       "You are a smart health app supervisor. Analyze the user's query "
-        "and route it to exactly one correct agent.\n"
-        "Do not answer user questions yourself; your only job is to delegate "
-        "to one agent, which will answer using its tools."
-        "- If the user asks about meal plans, nutrition advice, or calorie tracking, use 'nutrition_planner'.\n"
-        "- If the user asks about exercises, workout routines, or exercise form, use 'fitness_tracker'.\n"
-        "- If the user asks about sleep hygiene, setting sleep schedules, or improving rest, use 'sleep_optimizer'.\n"
-        "- If the user asks about meditation, stress management, or mental health support, use 'mental_wellness'.\n"
-        "- If the user asks about expenses and spending, use 'spending_tracker'.\n"
-    ),
-    output_mode="last_message" # Returns the final answer from the sub-agent
+# workflow = create_supervisor(
+#     [nutrition_agent, wellness_agent, sleep_agent, fitness_agent, spending_agent],
+#     #agent_list,
+#     model=model,
+#     prompt=(
+#        "You are a smart health app supervisor. Analyze the user's query "
+#         "and route it to exactly one correct agent.\n"
+#         "Once a specialist agent provides an answer, that is the FINAL answer. "
+#         "Do not ask them to repeat it and do not try to route it again."
+#         "- If the user asks about meal plans, nutrition advice, or calorie tracking, use 'nutrition_agent'.\n"
+#         "- If the user asks about exercises, workout routines, or exercise form, use 'fitness_agent'.\n"
+#         "- If the user asks about sleep hygiene, setting sleep schedules, or improving rest, use 'sleep_agent'.\n"
+#         "- If the user asks about meditation, stress management, or mental health support, use 'wellness_agent'.\n"
+#         "- If the user asks about expenses and spending, use 'spending_agent'.\n"
+#     ),
+#     output_mode="last_message" # Returns the final answer from the sub-agent
+# )
+# # 6. Initialize Checkpointer and Compile
+# #memory = InMemorySaver()
+# graph_app = workflow.compile()
+
+HEALTH_TOOLS = [
+    nutrition_planner, 
+    fitness_trackker, 
+    sleep_optimizer, 
+    mental_wellness, 
+    log_health_spend
+]
+
+SYSTEM_PROMPT = (
+    "You are a holistic Health Assistant. You have access to specialized tools "
+    "for nutrition, fitness, sleep, mental wellness, and spending tracking. "
+    "\n1. Identify what the user needs. "
+    "\n2. Call the single most relevant tool to get data. "
+    "\n3. Summarize the tool's output into a friendly, helpful response. "
+    "\nIf a tool returns a data structure (like a meal plan), present it clearly to the user."
 )
-# 6. Initialize Checkpointer and Compile
-memory = InMemorySaver()
-graph_app = workflow.compile(checkpointer=memory)
+
+# Create the single Agent
+# No supervisor needed, which saves significant API tokens
+health_agent = create_react_agent(
+    model,
+    tools=HEALTH_TOOLS,
+    name="health_assistant",
+    prompt=SYSTEM_PROMPT
+)
+
+#graph_app = health_agent.compile()
 
 @app.post("/chat")
 async def chat_endpoint(request: UserQuery):
     try:
         print(f"Received query: {request.query}")
-        config = {"configurable": {"thread_id": "1"}}
+        #config = {"configurable": {"thread_id": "1"},"recursion_limit": 10}
+        config = {"recursion_limit": 5}
         print("--- Natural Language Health App Started ---")
-        result = graph_app.invoke({
-            "messages": [{
-                "role": "user", 
-                "content": request.query
-            }]
+        # result = graph_app.invoke({
+        #     "messages": [{
+        #         "role": "user", 
+        #         "content": request.query
+        #     }]
+        # }, config=config)
+        result = health_agent.invoke({
+            "messages": [("user", request.query)]
         }, config=config)
 
 
@@ -418,7 +450,8 @@ async def chat_endpoint(request: UserQuery):
             return {"response": "No response generated."}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Detailed Error: {e}")
+        raise HTTPException(status_code=500, detail="The agent is taking too many steps. Try a simpler query.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -427,8 +460,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="127.0.0.1", port=8080)
 
     # while True:
     #     try:
